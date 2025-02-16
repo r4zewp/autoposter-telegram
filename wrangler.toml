@@ -1,0 +1,27 @@
+name = "youlooksmart-bot"
+main = "main.py"
+compatibility_date = "2024-02-16"
+
+# Workers configuration
+workers_dev = true
+compatibility_flags = ["python_workers"]
+
+[vars]
+# These are fallback values for local development
+# In production, set these using `wrangler secret put NAME`
+YOUTUBE = "https://www.youtube.com/feeds/videos.xml?channel_id=UCKluY_DDchdanvmDl7KIfgQ"
+
+# Supabase configuration
+# Don't put actual values here - use wrangler secrets
+[vars.development]
+ENVIRONMENT = "development"
+
+[vars.production]
+ENVIRONMENT = "production"
+
+# Cron Triggers for scheduled tasks
+[triggers]
+crons = ["0 * * * *"]  # Run every hour
+
+[build]
+command = "pip install -r requirements.txt"
