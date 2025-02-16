@@ -1,52 +1,66 @@
 import feedparser
+from dataclasses import dataclass
+import logging
+from typing import List
 
-from models.video import Video
-
+from supabase import Client
 from config.core import core
-from services.remove_hashtags import remove_hashtags
 
-async def check_youtube(supabase_client):
-    feed = feedparser.parse(core.YOUTUBE)
-    
-    feed_videos = []
-    for_supabase = []
+logger = logging.getLogger(__name__)
 
-    if feed.entries:
-        # Получаем видео из Supabase
+@dataclass
+class Video:
+    youtube_id: str
+    title: str
+    summary: str
+    link: str
+
+def remove_hashtags(title: str, summary: str) -> tuple[str, str]:
+    """Remove hashtags from title and summary"""
+    title = ' '.join(word for word in title.split() if not word.startswith('#'))
+    summary = ' '.join(word for word in summary.split() if not word.startswith('#'))
+    return title, summary
+
+async def check_youtube(supabase_client: Client) -> List[Video]:
+    """Check YouTube RSS feed for new videos"""
+    try:
+        feed = feedparser.parse(core.YOUTUBE)
+        
+        # Get existing videos from database
         supabase_videos = supabase_client.table('videos').select("*").execute()
-        existing_videos = supabase_videos.data  # список словарей, где есть ключ "youtube_id"
-
-        # Создаем множество существующих youtube_id для быстрой проверки
+        existing_videos = supabase_videos.data
+        
+        # Create set of existing video IDs for quick lookup
         existing_ids = {video["youtube_id"] for video in existing_videos}
         
-
-        # Фильтруем только новые видео, которых еще нет в базе
-        feed_videos: list[Video] = []
+        # Process new videos
+        new_videos: List[Video] = []
+        for_supabase: List[dict] = []
+        
         for video in feed.entries:
             if video.id not in existing_ids:
                 title, summary = remove_hashtags(title=video.title, summary=video.summary)
-                feed_videos.append(Video(youtube_id=video.id, title=title, summary=summary, link=video.link))
-                for_supabase.append({"youtube_id": video.id, "title": title, "summary": summary})
+                new_videos.append(
+                    Video(
+                        youtube_id=video.id,
+                        title=title,
+                        summary=summary,
+                        link=video.link
+                    )
+                )
+                for_supabase.append({
+                    "youtube_id": video.id,
+                    "title": title,
+                    "summary": summary
+                })
         
-        # Добавляем новые видео в базу
-        supabase_client.table('videos').insert(for_supabase).execute()
+        # Add new videos to database
+        if for_supabase:
+            supabase_client.table('videos').insert(for_supabase).execute()
+            logger.info(f"Added {len(for_supabase)} new videos to database")
         
-        return feed_videos
-
-        # entry = feed.entries[0]
+        return new_videos
         
-        # link = entry.link 
-        # return title, summary, link
-        
-    return None, None
-
-# last_video = None
-
-# while True:
-#     title, link = check_youtube()
-#     if title and link and link != last_video:
-#         message = f"Новое видео: {title}\nСмотреть: {link}"
-#         post_to_telegram(message)
-#         last_video = link
-#         print("Опубликовано новое видео:", title)
-#     time.sleep(300)  # проверка каждые 5 минут
+    except Exception as e:
+        logger.error(f"Error checking YouTube feed: {e}")
+        return []

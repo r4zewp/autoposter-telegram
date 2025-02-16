@@ -1,52 +1,44 @@
-from aiogram import Bot, Dispatcher
-from aiogram.filters import CommandStart, Command
-from aiogram.types import Message
-from supabase import Client
-
-from config.core import core
-
 import asyncio
 import logging
 
-from services import youtube_service as ys
-from services import generate_message as gm
+from aiogram import Bot, Dispatcher
+
+from config.core import core
 from middlewares import supabase_middleware as sm
+from handlers.youtube_handlers import register_handlers
+from scheduler.youtube_scheduler import start_scheduler
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-bot = Bot(token=core.TOKEN)
-dp = Dispatcher()
+async def main() -> None:
+    """Initialize and start the bot"""
+    # Initialize bot and dispatcher
+    bot = Bot(token=core.TOKEN)
+    dp = Dispatcher()
 
-@dp.message(CommandStart())
-async def start_command(message: Message):
-    await message.answer('Hello! I am YouLookSmart Bot. I can send you updates about new videos on my channel.')
-
-@dp.message(Command('check'))
-async def youtube_command(message: Message, supabase_client: Client):
-    await message.answer('YouTube updates will be sent to you soon!')
-    new_videos = await ys.check_youtube(supabase_client)
-    for video in new_videos:
-        await bot.send_message(
-            chat_id='@youlooksmart', 
-            text=gm.generate_message(video.link, video.title, video.summary),
-            parse_mode="HTML"
-            )
-
-
-async def main():
-    logging.info('Starting bot polling...')
     try:
-        logging.info('Attempting to start bot polling...')
+        # Register message handlers
+        register_handlers(dp)
+        
+        # Setup middleware
         dp.message.middleware(sm.SupabaseMiddleware())
+        
+        # Start scheduler in background
+        start_scheduler(bot, sm.supabase_client)
+        
+        # Start polling
+        logger.info("Starting bot...")
         await dp.start_polling(bot)
-        logging.info('Bot polling started successfully.')
+        
     except Exception as e:
-        logging.error(f'An error occurred: {e}')
+        logger.error(f'An error occurred: {e}')
     finally:
-        logging.info('Closing bot session...')
         await bot.session.close()
-        logging.info('Bot session closed successfully.')
 
 if __name__ == "__main__":
     asyncio.run(main())
