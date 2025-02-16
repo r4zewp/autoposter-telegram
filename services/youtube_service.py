@@ -26,6 +26,8 @@ async def check_youtube(supabase_client: Client) -> List[Video]:
     try:
         feed = feedparser.parse(core.YOUTUBE)
         
+        print(feed.entries)
+
         # Get existing videos from database
         supabase_videos = supabase_client.table('videos').select("*").execute()
         existing_videos = supabase_videos.data
