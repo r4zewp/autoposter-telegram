@@ -18,6 +18,7 @@ class Video:
 def remove_hashtags(title: str, summary: str) -> tuple[str, str]:
     """Remove hashtags from title and summary"""
     title = ' '.join(word for word in title.split() if not word.startswith('#'))
+    title = title.replace('/', '')
     summary = ' '.join(word for word in summary.split() if not word.startswith('#'))
     return title, summary
 
